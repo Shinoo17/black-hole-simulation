@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Gravitational Lensing — Schwarzschild Black Hole</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#000005;
+    --panel:rgba(8,12,22,0.72);
+    --line:rgba(140,170,255,0.18);
+    --text:#c9d6f2;
+    --dim:#5d6b8c;
+    --accent:#7fb4ff;
+    --warm:#ffd9a0;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden;background:var(--bg);
+    font-family:'IBM Plex Sans Thai',sans-serif;color:var(--text)}
+  canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+  canvas#gl:active{cursor:grabbing}
+
+  /* ── Title ── */
+  .title{position:fixed;top:18px;left:20px;pointer-events:none;z-index:5}
+  .title .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.22em;
+    color:var(--accent);text-transform:uppercase;margin-bottom:4px}
+  .title h1{font-size:17px;font-weight:500;letter-spacing:0.02em}
+  .title .sub{font-size:11.5px;color:var(--dim);margin-top:2px}
+
+  /* ── Instrument panel ── */
+  .panel{position:fixed;top:18px;right:18px;width:280px;z-index:10;
+    background:var(--panel);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;
+    transition:transform .25s ease}
+  .panel-head{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+  .panel-head span{font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+    letter-spacing:0.18em;color:var(--accent)}
+  .panel-head .chev{color:var(--dim);font-size:11px;transition:transform .25s}
+  .panel.collapsed .panel-body{display:none}
+  .panel.collapsed .chev{transform:rotate(-90deg)}
+  .panel-body{padding:12px 14px 14px}
+
+  .ctrl{margin-bottom:13px}
+  .ctrl:last-child{margin-bottom:0}
+  .ctrl-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
+  .ctrl-label .name{font-size:12px;color:var(--text)}
+  .ctrl-label .val{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--warm)}
+
+  input[type=range]{width:100%;appearance:none;-webkit-appearance:none;height:18px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:2px;background:linear-gradient(90deg,var(--accent) var(--fill,50%),rgba(140,170,255,0.15) var(--fill,50%));border-radius:1px}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+    background:#0a0f1c;border:1.5px solid var(--accent);margin-top:-5px;
+    box-shadow:0 0 8px rgba(127,180,255,0.5)}
+  input[type=range]::-moz-range-track{height:2px;background:rgba(140,170,255,0.15);border-radius:1px}
+  input[type=range]::-moz-range-progress{height:2px;background:var(--accent)}
+  input[type=range]::-moz-range-thumb{width:11px;height:11px;border-radius:50%;background:#0a0f1c;border:1.5px solid var(--accent)}
+
+  .row{display:flex;gap:8px;align-items:center}
+
+  /* toggle */
+  .toggle-row{display:flex;justify-content:space-between;align-items:center}
+  .switch{position:relative;width:34px;height:18px;flex-shrink:0}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .track{position:absolute;inset:0;border-radius:9px;background:rgba(140,170,255,0.15);
+    border:1px solid var(--line);transition:.2s;cursor:pointer}
+  .switch .track::before{content:'';position:absolute;width:12px;height:12px;border-radius:50%;
+    top:2px;left:2px;background:var(--dim);transition:.2s}
+  .switch input:checked + .track{background:rgba(127,180,255,0.35);border-color:var(--accent)}
+  .switch input:checked + .track::before{transform:translateX(16px);background:var(--accent);
+    box-shadow:0 0 8px rgba(127,180,255,0.7)}
+
+  /* segmented quality */
+  .seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .seg button{flex:1;padding:5px 0;font-family:'IBM Plex Sans Thai',sans-serif;font-size:11.5px;
+    background:transparent;border:none;color:var(--dim);cursor:pointer;transition:.15s}
+  .seg button.on{background:rgba(127,180,255,0.18);color:var(--accent)}
+
+  .divider{height:1px;background:var(--line);margin:13px -14px}
+
+  /* readout */
+  .readout{position:fixed;bottom:16px;left:20px;z-index:5;pointer-events:none;
+    font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--dim);line-height:1.7}
+  .readout b{color:var(--accent);font-weight:500}
+
+  .hint{position:fixed;bottom:16px;right:18px;z-index:5;pointer-events:none;
+    font-size:11px;color:var(--dim);text-align:right;line-height:1.6}
+
+  @media (max-width:640px){
+    .panel{width:calc(100% - 24px);right:12px;top:auto;bottom:12px}
+    .title{top:12px;left:14px}
+    .readout{bottom:auto;top:70px;left:14px}
+    .hint{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){ .panel,.switch .track::before{transition:none} }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div class="title">
+  <div class="eyebrow">Schwarzschild geodesic ray-tracer</div>
+  <h1>จำลองหลุมดำ · Gravitational Lensing</h1>
+  <div class="sub">ลากเพื่อหมุนกล้องรอบหลุมดำ · scroll / pinch เพื่อ zoom</div>
+</div>
+
+<div class="panel" id="panel">
+  <div class="panel-head" id="panelHead">
+    <span>PARAMETERS</span><span class="chev">▼</span>
+  </div>
+  <div class="panel-body">
+
+    <div class="ctrl toggle-row">
+      <span class="name" style="font-size:12px">การโค้งของแสง (lensing)</span>
+      <label class="switch"><input type="checkbox" id="lensOn" checked><span class="track"></span></label>
+    </div>
+
+    <div class="ctrl toggle-row">
+      <span class="name" style="font-size:12px">จานพอกพูนมวล (accretion disk)</span>
+      <label class="switch"><input type="checkbox" id="diskOn" checked><span class="track"></span></label>
+    </div>
+
+    <div class="ctrl toggle-row">
+      <span class="name" style="font-size:12px">Hawking radiation</span>
+      <label class="switch"><input type="checkbox" id="hawkOn" checked><span class="track"></span></label>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="ctrl">
+      <div class="ctrl-label"><span class="name">มวลหลุมดำ — r<sub>s</sub></span><span class="val" id="vRs">1.00</span></div>
+      <input type="range" id="rs" min="0.3" max="3" step="0.01" value="1">
+    </div>
+
+    <div class="ctrl">
+      <div class="ctrl-label"><span class="name">ระยะดาวฤกษ์จากหลุมดำ</span><span class="val" id="vDist">35</span></div>
+      <input type="range" id="starDist" min="12" max="70" step="0.5" value="35">
+    </div>
+
+    <div class="ctrl">
+      <div class="ctrl-label"><span class="name">มุมโคจรของดาวฤกษ์</span><span class="val" id="vAng">180°</span></div>
+      <input type="range" id="starAng" min="0" max="360" step="0.5" value="180">
+    </div>
+
+    <div class="ctrl">
+      <div class="ctrl-label"><span class="name">ความสูงของดาว (แกน Y)</span><span class="val" id="vH">0.0</span></div>
+      <input type="range" id="starH" min="-10" max="10" step="0.1" value="0">
+    </div>
+
+    <div class="ctrl">
+      <div class="ctrl-label"><span class="name">ขนาดดาวฤกษ์</span><span class="val" id="vSize">1.2</span></div>
+      <input type="range" id="starSize" min="0.4" max="3" step="0.05" value="1.2">
+    </div>
+
+    <div class="ctrl toggle-row">
+      <span class="name" style="font-size:12px">ดาวโคจรอัตโนมัติ</span>
+      <label class="switch"><input type="checkbox" id="orbitOn" checked><span class="track"></span></label>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="ctrl">
+      <div class="ctrl-label"><span class="name">ความสว่างพื้นหลัง</span><span class="val" id="vBg">1.6</span></div>
+      <input type="range" id="bgBright" min="0.4" max="3.5" step="0.05" value="1.6">
+    </div>
+
+    <div class="ctrl">
+      <div class="ctrl-label"><span class="name">คุณภาพการเรนเดอร์</span></div>
+      <div class="seg" id="quality">
+        <button data-q="0">ต่ำ</button>
+        <button data-q="1" class="on">กลาง</button>
+        <button data-q="2">สูง</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="readout" id="readout"></div>
+<div class="hint">เมื่อดาวอยู่หลังหลุมดำพอดี<br>จะเห็น <b style="color:var(--accent)">Einstein ring</b></div>
+
+<script>
+'use strict';
+const canvas = document.getElementById('gl');
+const gl = canvas.getContext('webgl2', {antialias:false}) || canvas.getContext('webgl', {antialias:false});
+if(!gl){ document.body.innerHTML = '<p style="padding:40px">เบราว์เซอร์ไม่รองรับ WebGL</p>'; throw new Error('no webgl'); }
+const isGL2 = (typeof WebGL2RenderingContext !== 'undefined') && (gl instanceof WebGL2RenderingContext);
+
+/* ───────────────────────── shaders ───────────────────────── */
+const VERT = (isGL2?'#version 300 es\nin vec2 aPos;':'attribute vec2 aPos;') + `
+void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+const FRAG_BODY = `
+precision highp float;
+
+uniform vec2  uRes;
+uniform vec3  uCamPos;
+uniform mat3  uCamMat;     // columns: right, up, -forward basis
+uniform float uTanFov;
+uniform float uRs;         // Schwarzschild radius
+uniform vec3  uStarPos;
+uniform float uStarR;
+uniform float uLensing;    // 0 or 1
+uniform float uDisk;       // accretion disk 0/1
+uniform float uHawking;    // hawking shimmer 0/1
+uniform float uSteps;      // max integration steps
+uniform float uBgBright;   // background brightness multiplier
+uniform float uTime;
+
+/* ---------- hash / starfield ---------- */
+vec3 hash33(vec3 p){
+  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+  p += dot(p, p.yxz + 33.33);
+  return fract((p.xxy + p.yxx) * p.zyx);
+}
+
+float hash13(vec3 p){
+  p = fract(p * 0.1031);
+  p += dot(p, p.zyx + 31.32);
+  return fract((p.x + p.y) * p.z);
+}
+
+float vnoise(vec3 p){
+  vec3 i = floor(p), f = p - i;
+  f = f * f * (3.0 - 2.0 * f);
+  float n000 = hash13(i);
+  float n100 = hash13(i + vec3(1,0,0));
+  float n010 = hash13(i + vec3(0,1,0));
+  float n110 = hash13(i + vec3(1,1,0));
+  float n001 = hash13(i + vec3(0,0,1));
+  float n101 = hash13(i + vec3(1,0,1));
+  float n011 = hash13(i + vec3(0,1,1));
+  float n111 = hash13(i + vec3(1,1,1));
+  return mix(mix(mix(n000,n100,f.x), mix(n010,n110,f.x), f.y),
+             mix(mix(n001,n101,f.x), mix(n011,n111,f.x), f.y), f.z);
+}
+
+float fbm(vec3 p){
+  float v = 0.0, a = 0.5;
+  for(int i = 0; i < 4; i++){
+    v += a * vnoise(p);
+    p = p * 2.13 + 7.7;
+    a *= 0.5;
+  }
+  return v;
+}
+
+float fbm3(vec3 p){
+  float v = 0.0, a = 0.5;
+  for(int i = 0; i < 3; i++){
+    v += a * vnoise(p);
+    p = p * 2.13 + 7.7;
+    a *= 0.5;
+  }
+  return v;
+}
+
+/* galactic plane orientation */
+const vec3 GAL_N  = vec3(0.205, 0.940, 0.270);   // plane normal (tilted)
+const vec3 GAL_C  = vec3(0.760, -0.180, -0.625); // toward galactic core
+
+vec3 starfield(vec3 d){
+  vec3 col = vec3(0.0);
+
+  /* distance from galactic plane & core, used for both stars and nebula */
+  float planeD = dot(d, normalize(GAL_N));
+  float coreD  = dot(d, normalize(GAL_C));
+  float band   = exp(-abs(planeD) * 4.2);              // milky way band
+  float core   = exp(-abs(planeD) * 6.5) * smoothstep(-0.3, 1.0, coreD);
+
+  /* ---- point stars: 4 layers, denser near the band ---- */
+  for(int i = 0; i < 4; i++){
+    float fi = float(i);
+    float scale = 45.0 + fi * 42.0;
+    vec3 q = d * scale;
+    vec3 id = floor(q);
+    vec3 f = q - id;
+    vec3 rnd = hash33(id + fi * 17.0);
+    float thr = 0.918 + fi * 0.010 - band * 0.030;     // more stars in the band
+    float on = step(thr, rnd.z);
+    float dist2 = dot(f - rnd, f - rnd);
+    float star = on * exp(-dist2 * (200.0 + fi * 110.0));
+    vec3 tint = mix(vec3(0.62, 0.76, 1.0), vec3(1.0, 0.84, 0.62), rnd.x);
+    col += star * tint * (0.8 + 1.6 * rnd.y);
+  }
+
+  /* ---- milky way nebula (skip entirely away from the band) ---- */
+  float nebGate = smoothstep(0.035, 0.09, band);
+  float n1 = 0.0, n2 = 0.0, dust = 0.0;
+  if(nebGate > 0.001){
+    n1   = fbm(d * 5.0);                                // large structure
+    n2   = fbm3(d * 13.0 + 31.0);                       // detail
+    dust = fbm3(d * 8.0 + 113.0);                       // dark dust lanes
+  }
+
+  float neb = band * (0.35 + 0.85 * n1) * (0.5 + 0.7 * n2) * nebGate;
+  neb *= smoothstep(0.18, 0.62, 1.0 - dust * band);     // carve dust lanes
+
+  vec3 nebCold = vec3(0.30, 0.42, 0.78);                // blue-violet arms
+  vec3 nebWarm = vec3(0.95, 0.78, 0.55);                // warm core glow
+  vec3 nebCol = mix(nebCold, nebWarm, clamp(core * 1.6 + n1 * 0.2, 0.0, 1.0));
+
+  col += nebCol * neb * 0.40;
+  col += nebWarm * core * core * (0.22 + 0.25 * n1);    // bright bulge
+  /* unresolved star haze inside the band */
+  col += vec3(0.75, 0.82, 1.0) * band * (0.030 + 0.045 * n2);
+
+  /* faint ambient so space is never pure black */
+  col += vec3(0.012, 0.016, 0.030);
+  return col * uBgBright;
+}
+
+/* ---------- analytic ray-sphere (star, no lensing) ---------- */
+float sphereHit(vec3 ro, vec3 rd, vec3 c, float r){
+  vec3 oc = ro - c;
+  float b = dot(oc, rd);
+  float h = b*b - (dot(oc,oc) - r*r);
+  if(h < 0.0) return -1.0;
+  float t = -b - sqrt(h);
+  return t > 0.0 ? t : -1.0;
+}
+
+/* star bloom contribution of a straight segment [0, tmax] */
+float segGlow(vec3 a, vec3 d, float tmax){
+  float tb = clamp(dot(uStarPos - a, d), 0.0, tmax);
+  vec3 cp = a + d * tb;
+  float d2 = dot(cp - uStarPos, cp - uStarPos);
+  return uStarR * uStarR * 0.55 / (d2 + 0.02);
+}
+
+vec3 shadeStar(vec3 hitPos, vec3 viewDir){
+  vec3 n = normalize(hitPos - uStarPos);
+  float limb = clamp(dot(n, -viewDir), 0.0, 1.0);
+  limb = pow(limb, 0.55);                       // limb darkening
+  vec3 core = vec3(1.0, 0.93, 0.78) * 6.0;
+  vec3 edge = vec3(1.0, 0.62, 0.30) * 1.6;
+  return mix(edge, core, limb);
+}
+
+/* ---------- accretion disk emission ----------
+   thin disk in the equatorial plane, ISCO → 9 rs            */
+vec3 diskShade(vec3 hp, vec3 vd){
+  float dIn = uRs * 3.0, dOut = uRs * 9.0;
+  float rr = length(hp.xz);
+  float x = clamp((rr - dIn) / (dOut - dIn), 0.0, 1.0);
+
+  /* temperature gradient: white-hot inner edge → deep red rim */
+  vec3 base = mix(vec3(1.05, 0.98, 0.90), vec3(1.00, 0.60, 0.22),
+                  smoothstep(0.0, 0.45, x));
+  base = mix(base, vec3(0.50, 0.14, 0.04), smoothstep(0.45, 1.0, x));
+
+  /* differential (keplerian-ish) rotation of gas streaks */
+  float ang = atan(hp.z, hp.x);
+  float omega = 1.6 / pow(max(rr / uRs, 1.0), 1.5);
+  float a = ang - uTime * omega;
+  float rings = 0.55 + 0.45 * vnoise(vec3(cos(a) * 3.0, sin(a) * 3.0, rr / uRs * 2.4));
+  rings *= 0.72 + 0.28 * vnoise(vec3(rr / uRs * 8.0, 1.7, 4.2));
+
+  /* relativistic beaming: the side rotating toward you is brighter */
+  vec3 tang = normalize(vec3(-hp.z, 0.0, hp.x));
+  float beta = sqrt(uRs / (2.0 * max(rr, uRs * 1.51)));
+  float beam = pow(clamp(1.0 + 2.2 * beta * dot(tang, -vd), 0.30, 2.6), 3.0);
+
+  float fadeIn  = smoothstep(dIn, dIn * 1.18, rr);
+  float fadeOut = 1.0 - smoothstep(dOut * 0.72, dOut, rr);
+  float lum = mix(5.0, 0.5, x);
+
+  return base * (lum * rings * beam * fadeIn * fadeOut);
+}
+
+void mainImage(out vec4 fragColor){
+  vec2 uv = (gl_FragCoord.xy * 2.0 - uRes) / uRes.y;
+  vec3 rd = normalize(uCamMat * vec3(uv * uTanFov, -1.0));
+  vec3 ro = uCamPos;
+
+  vec3 acc = vec3(0.0);     // emission picked up along the ray (disk)
+  float trans = 1.0;        // transmittance through the semi-transparent disk
+  float glow = 0.0;         // star bloom
+  float hawk = 0.0;         // hawking shimmer
+  vec3 col = vec3(0.0);
+  bool done = false;
+
+  float dIn  = uRs * 3.0;   // ISCO
+  float dOut = uRs * 9.0;
+
+  if(uLensing < 0.5){
+    /* ---------- straight rays ---------- */
+    float tStar = sphereHit(ro, rd, uStarPos, uStarR);
+    float tBH   = sphereHit(ro, rd, vec3(0.0), uRs);
+    float tSurf = 1e9; int surf = 0;            // 0 bg · 1 star · 2 horizon
+    if(tStar > 0.0 && tStar < tSurf){ tSurf = tStar; surf = 1; }
+    if(tBH   > 0.0 && tBH   < tSurf){ tSurf = tBH;   surf = 2; }
+
+    if(uDisk > 0.5 && abs(rd.y) > 1e-5){
+      float t = -ro.y / rd.y;
+      if(t > 0.0 && t < tSurf){
+        vec3 hp = ro + rd * t;
+        float rr = length(hp.xz);
+        if(rr > dIn && rr < dOut){
+          acc += diskShade(hp, rd);
+          trans *= 0.30;
+        }
+      }
+    }
+
+    if(uHawking > 0.5){
+      float bb = dot(-ro, rd);
+      float dmin = length(ro + rd * max(bb, 0.0));
+      hawk = exp(-pow((dmin - uRs * 1.06) / (uRs * 0.10), 2.0))
+           * (0.55 + 0.45 * vnoise(rd * 9.0 + uTime * 2.0)) * 0.9;
+    }
+
+    float b = clamp(dot(uStarPos - ro, rd), 0.0, tSurf);
+    vec3 cp = ro + rd * b;
+    float d2 = dot(cp - uStarPos, cp - uStarPos);
+    glow = trans * uStarR * uStarR * 0.55 / (d2 + 0.02);
+
+    if(surf == 1)       col = shadeStar(ro + rd * tStar, rd);
+    else if(surf == 2){ col = vec3(0.0); glow = 0.0; }
+    else                col = starfield(rd);
+  } else {
+    /* ============ hybrid lensing renderer ============
+       1) far-field (impact param b > 10 rs): analytic weak-field
+          kick  α ≈ 2rs/b + (15π/16)(rs/b)²  — O(1) per ray
+       2) strong-field: geodesic integration, but only inside a
+          simulation sphere R_SIM = 24 rs (skip straight to it,
+          finish analytically after exit + residual kick)
+       photon geodesic:  d²x/dλ² = -3/2 · rs · h² · x / r⁵     */
+
+    float B_CUT  = uRs * 10.0;
+    float R_SIM  = uRs * 24.0;
+    float R_SIM2 = R_SIM * R_SIM;
+
+    float tb0  = dot(-ro, rd);
+    vec3  cp0  = ro + rd * max(tb0, 0.0);
+    float dmin2 = dot(cp0, cp0);          // min distance² of ray to BH
+
+    if(dmin2 > B_CUT * B_CUT){
+      /* ---------- far-field: single analytic kick ---------- */
+      if(tb0 > 0.0){
+        float b  = sqrt(dmin2);
+        vec3  bh = cp0 / b;
+        float ib = uRs / b;
+        float a  = 2.0 * ib + 2.945 * ib * ib;     // 15π/16 ≈ 2.945
+        vec3  rd2 = rd * cos(a) - bh * sin(a);     // bend toward the BH
+        float tA = sphereHit(ro, rd, uStarPos, uStarR);
+        glow += segGlow(ro, rd, tb0);
+        if(tA > 0.0 && tA < tb0){
+          col = shadeStar(ro + rd * tA, rd);
+        } else {
+          glow += segGlow(cp0, rd2, 1e9);
+          float tB = sphereHit(cp0, rd2, uStarPos, uStarR);
+          col = (tB > 0.0) ? shadeStar(cp0 + rd2 * tB, rd2) : starfield(rd2);
+        }
+      } else {
+        /* BH behind the ray and far away → effectively straight */
+        float tA = sphereHit(ro, rd, uStarPos, uStarR);
+        glow += segGlow(ro, rd, 1e9);
+        col = (tA > 0.0) ? shadeStar(ro + rd * tA, rd) : starfield(rd);
+      }
+    } else {
+      /* ---------- strong-field: bounded integration ---------- */
+      vec3 pos = ro;
+      vec3 vel = rd;
+
+      /* skip straight to the simulation sphere (bending out there
+         is negligible for b ≤ 10 rs) */
+      if(dot(ro, ro) > R_SIM2){
+        float tE = tb0 - sqrt(max(R_SIM2 - dmin2, 0.0));
+        float tA = sphereHit(ro, rd, uStarPos, uStarR);
+        glow += segGlow(ro, rd, tE);
+        if(tA > 0.0 && tA < tE){
+          col = shadeStar(ro + rd * tA, rd);
+          done = true;
+        } else {
+          pos = ro + rd * tE;
+        }
+      }
+
+      if(!done){
+        vec3  cv   = cross(pos, vel);
+        float kGeo = -1.5 * uRs * dot(cv, cv);     // hoisted: -3/2·rs·h²
+        float capR2 = uRs * uRs * 1.0101;
+        float diskGate = dOut * dOut * 2.2;        // only refine near the disk
+        float hawkR = uRs * 1.45;
+        int maxSteps = int(uSteps);
+
+        for(int i = 0; i < 700; i++){
+          if(i >= maxSteps) break;
+          float r2 = dot(pos, pos);
+
+          /* captured by event horizon → black */
+          if(r2 < capR2){ done = true; break; }
+
+          /* left the sphere moving outward → residual kick + analytic */
+          if(r2 > R_SIM2 && dot(pos, vel) > 0.0){
+            vec3 vn = vel * inversesqrt(dot(vel, vel));
+            vec3 cx = cross(pos, vn);
+            float bb = sqrt(dot(cx, cx));
+            vec3 q = pos - vn * dot(pos, vn);
+            float ql = max(length(q), 1e-5);
+            float aRem = (uRs / max(bb, uRs))
+                       * (1.0 - sqrt(max(1.0 - bb * bb / r2, 0.0)));
+            vn = normalize(vn * cos(aRem) - (q / ql) * sin(aRem));
+            glow += trans * segGlow(pos, vn, 1e9);
+            float tB = sphereHit(pos, vn, uStarPos, uStarR);
+            col = (tB > 0.0) ? shadeStar(pos + vn * tB, vn) : starfield(vn);
+            done = true; break;
+          }
+
+          float r = sqrt(r2);
+          float dt = clamp(r * 0.07, 0.012, 2.5);
+          vec3 toStar = uStarPos - pos;
+          float dStar2 = dot(toStar, toStar);
+          float dStar = sqrt(dStar2);
+          dt = min(dt, max(dStar * 0.35, 0.04));
+          if(uDisk > 0.5 && (r2 - pos.y * pos.y) < diskGate)
+            dt = min(dt, max(abs(pos.y) * 0.6, 0.03));
+
+          /* hawking shimmer — only near the horizon shell */
+          if(uHawking > 0.5 && r < hawkR){
+            float g = (r - uRs * 1.06) / (uRs * 0.09);
+            float fl = 0.55 + 0.45 * vnoise(pos * (7.0 / uRs) + uTime * 2.2);
+            hawk += trans * dt * exp(-g * g) * fl / uRs;
+          }
+
+          vec3 accel = (kGeo / (r2 * r2 * r)) * pos;
+          vec3 nvel = vel + accel * dt;
+          vec3 npos = pos + nvel * dt;          // semi-implicit Euler
+
+          /* accretion disk: equatorial plane crossing */
+          if(uDisk > 0.5 && pos.y * npos.y <= 0.0
+             && abs(pos.y - npos.y) > 1e-7
+             && (r2 - pos.y * pos.y) < diskGate){
+            float tt = pos.y / (pos.y - npos.y);
+            vec3 hp = mix(pos, npos, tt);
+            float rr = length(hp.xz);
+            if(rr > dIn && rr < dOut){
+              acc += trans * diskShade(hp, normalize(npos - pos));
+              trans *= 0.30;
+              if(trans < 0.02){ done = true; break; }
+            }
+          }
+
+          float segLen = length(npos - pos);
+          glow += trans * segLen * uStarR * uStarR * 0.030 / (dStar2 + 0.02);
+
+          /* precise star test only when a hit is geometrically possible */
+          if(dStar < segLen + uStarR){
+            vec3 sd = (npos - pos) / segLen;
+            float tb = dot(toStar, sd);
+            float tcl = clamp(tb, 0.0, segLen);
+            vec3 cp = pos + sd * tcl;
+            float d2 = dot(cp - uStarPos, cp - uStarPos);
+            if(d2 < uStarR * uStarR){
+              float thit = tb - sqrt(max(uStarR * uStarR - d2, 0.0));
+              vec3 hp = pos + sd * clamp(thit, 0.0, segLen);
+              col = shadeStar(hp, sd);
+              done = true; break;
+            }
+          }
+
+          vel = nvel;
+          pos = npos;
+        }
+
+        if(!done){
+          /* ran out of steps mid-flight: approximate with current direction */
+          col = starfield(normalize(vel));
+        }
+      }
+    }
+  }
+
+  /* composite: disk emission + transmitted surface/background + glows */
+  col = acc + trans * col
+      + vec3(1.0, 0.82, 0.6) * glow
+      + vec3(0.55, 0.70, 1.0) * hawk * 0.6;
+
+  /* tone map + subtle vignette */
+  col = 1.0 - exp(-col * 1.25);
+  float vig = 1.0 - 0.28 * pow(length(uv) * 0.55, 2.0);
+  col *= vig;
+  /* dither to kill banding */
+  col += (hash33(vec3(gl_FragCoord.xy, uTime)).x - 0.5) / 255.0;
+
+  fragColor = vec4(col, 1.0);
+}`;
+
+const FRAG = isGL2
+  ? '#version 300 es\n' + FRAG_BODY + '\nout vec4 outColor;\nvoid main(){ mainImage(outColor); }'
+  : FRAG_BODY + '\nvoid main(){ vec4 c; mainImage(c); gl_FragColor = c; }';
+
+/* ───────────────────────── GL setup ───────────────────────── */
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if(!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+const prog = gl.createProgram();
+gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FRAG));
+gl.linkProgram(prog);
+if(!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+const buf = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+const locPos = gl.getAttribLocation(prog, 'aPos');
+gl.enableVertexAttribArray(locPos);
+gl.vertexAttribPointer(locPos, 2, gl.FLOAT, false, 0, 0);
+
+const U = {};
+['uRes','uCamPos','uCamMat','uTanFov','uRs','uStarPos','uStarR','uLensing','uDisk','uHawking','uSteps','uBgBright','uTime']
+  .forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+/* ───────────────────────── state ───────────────────────── */
+const state = {
+  yaw: 0.35, pitch: 0.10, dist: 26,
+  rs: 1.0,
+  starDist: 35, starAng: Math.PI, starH: 0, starR: 1.2,
+  lensing: true, autoOrbit: true,
+  disk: true, hawking: true,
+  bgBright: 1.6,
+  quality: 1,
+  fov: 60 * Math.PI / 180,
+};
+const QUALITY = [
+  {steps: 160, scale: 0.5},
+  {steps: 320, scale: 0.72},
+  {steps: 560, scale: 1.0},
+];
+
+/* ───────────────────────── controls ───────────────────────── */
+const $ = id => document.getElementById(id);
+function bindSlider(id, valId, fmt, set){
+  const el = $(id), v = $(valId);
+  const update = () => {
+    const x = parseFloat(el.value);
+    set(x); v.textContent = fmt(x);
+    const pct = (x - el.min) / (el.max - el.min) * 100;
+    el.style.setProperty('--fill', pct + '%');
+  };
+  el.addEventListener('input', update); update();
+}
+bindSlider('rs','vRs', x=>x.toFixed(2), x=>state.rs=x);
+bindSlider('starDist','vDist', x=>x.toFixed(0), x=>state.starDist=x);
+bindSlider('starAng','vAng', x=>x.toFixed(0)+'°', x=>state.starAng=x*Math.PI/180);
+bindSlider('starH','vH', x=>x.toFixed(1), x=>state.starH=x);
+bindSlider('starSize','vSize', x=>x.toFixed(2), x=>state.starR=x);
+bindSlider('bgBright','vBg', x=>x.toFixed(2), x=>state.bgBright=x);
+$('lensOn').addEventListener('change', e=>state.lensing=e.target.checked);
+$('diskOn').addEventListener('change', e=>state.disk=e.target.checked);
+$('hawkOn').addEventListener('change', e=>state.hawking=e.target.checked);
+$('orbitOn').addEventListener('change', e=>{
+  state.autoOrbit=e.target.checked;
+  if(!e.target.checked){ // sync slider back
+    const deg = ((state.starAng*180/Math.PI)%360+360)%360;
+    $('starAng').value = deg; $('vAng').textContent = deg.toFixed(0)+'°';
+  }
+});
+document.querySelectorAll('#quality button').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    document.querySelectorAll('#quality button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    state.quality = +b.dataset.q;
+    resize();
+  });
+});
+$('panelHead').addEventListener('click', ()=> $('panel').classList.toggle('collapsed'));
+
+/* ───────────────────────── camera input ───────────────────────── */
+let dragging=false, lastX=0, lastY=0, pinchD=0;
+canvas.addEventListener('pointerdown', e=>{
+  dragging=true; lastX=e.clientX; lastY=e.clientY;
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener('pointermove', e=>{
+  if(!dragging) return;
+  state.yaw   -= (e.clientX-lastX)*0.005;
+  state.pitch += (e.clientY-lastY)*0.005;
+  state.pitch = Math.max(-1.45, Math.min(1.45, state.pitch));
+  lastX=e.clientX; lastY=e.clientY;
+});
+addEventListener('pointerup', ()=>dragging=false);
+canvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  state.dist *= Math.exp(e.deltaY*0.0012);
+  state.dist = Math.max(state.rs*3.2, Math.min(110, state.dist));
+},{passive:false});
+canvas.addEventListener('touchstart', e=>{
+  if(e.touches.length===2){
+    pinchD = Math.hypot(e.touches[0].clientX-e.touches[1].clientX,
+                        e.touches[0].clientY-e.touches[1].clientY);
+  }
+},{passive:true});
+canvas.addEventListener('touchmove', e=>{
+  if(e.touches.length===2){
+    e.preventDefault();
+    const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX,
+                         e.touches[0].clientY-e.touches[1].clientY);
+    state.dist *= pinchD/d;
+    state.dist = Math.max(state.rs*3.2, Math.min(110, state.dist));
+    pinchD = d; dragging=false;
+  }
+},{passive:false});
+
+/* ───────────────────────── resize ───────────────────────── */
+function resize(){
+  const q = QUALITY[state.quality];
+  const dpr = Math.min(devicePixelRatio||1, 2) * q.scale;
+  canvas.width  = Math.round(innerWidth  * dpr);
+  canvas.height = Math.round(innerHeight * dpr);
+  gl.viewport(0,0,canvas.width,canvas.height);
+}
+addEventListener('resize', resize); resize();
+
+/* ───────────────────────── render loop ───────────────────────── */
+const readout = $('readout');
+let prev = performance.now(), fps = 60, fpsT = 0;
+
+function frame(now){
+  const dt = Math.min((now-prev)/1000, 0.1); prev = now;
+  fps += ((1/Math.max(dt,1e-4))-fps)*0.05;
+
+  if(state.autoOrbit) state.starAng += dt*0.18;
+
+  /* camera */
+  const cp=Math.cos(state.pitch), sp=Math.sin(state.pitch);
+  const cy=Math.cos(state.yaw),   sy=Math.sin(state.yaw);
+  const cam=[state.dist*cp*sy, state.dist*sp, state.dist*cp*cy];
+  /* basis: forward = -normalize(cam) (look at origin) */
+  const fl=Math.hypot(cam[0],cam[1],cam[2]);
+  const f=[-cam[0]/fl,-cam[1]/fl,-cam[2]/fl];
+  let r=[f[2],0,-f[0]]; const rl=Math.hypot(r[0],r[1],r[2])||1;
+  r=[r[0]/rl,r[1]/rl,r[2]/rl];
+  const u=[r[1]*f[2]-r[2]*f[1], r[2]*f[0]-r[0]*f[2], r[0]*f[1]-r[1]*f[0]];
+  // mat3 columns: right, up, back(-forward used in shader as -z)
+  const m=[r[0],r[1],r[2], u[0],u[1],u[2], -f[0],-f[1],-f[2]];
+
+  /* star position */
+  const sx=state.starDist*Math.sin(state.starAng);
+  const sz=state.starDist*Math.cos(state.starAng);
+  const star=[sx, state.starH, sz];
+
+  const q=QUALITY[state.quality];
+
+  gl.uniform2f(U.uRes, canvas.width, canvas.height);
+  gl.uniform3fv(U.uCamPos, cam);
+  gl.uniformMatrix3fv(U.uCamMat, false, m);
+  gl.uniform1f(U.uTanFov, Math.tan(state.fov/2));
+  gl.uniform1f(U.uRs, state.rs);
+  gl.uniform3fv(U.uStarPos, star);
+  gl.uniform1f(U.uStarR, state.starR);
+  gl.uniform1f(U.uLensing, state.lensing?1:0);
+  gl.uniform1f(U.uDisk, state.disk?1:0);
+  gl.uniform1f(U.uHawking, state.hawking?1:0);
+  gl.uniform1f(U.uSteps, q.steps);
+  gl.uniform1f(U.uBgBright, state.bgBright);
+  gl.uniform1f(U.uTime, now*0.001);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  fpsT += dt;
+  if(fpsT > 0.25){
+    fpsT = 0;
+    const photonR = (state.rs*1.5).toFixed(2);
+    const isco = (state.rs*3).toFixed(2);
+    readout.innerHTML =
+      `r<sub>s</sub> = <b>${state.rs.toFixed(2)}</b> · photon sphere = <b>${photonR}</b> · ISCO = <b>${isco}</b><br>`+
+      `camera dist = ${state.dist.toFixed(1)} · star dist = ${state.starDist.toFixed(0)}<br>`+
+      `${q.steps} steps/ray · ${fps.toFixed(0)} fps`;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
